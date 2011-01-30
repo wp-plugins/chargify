@@ -1,5 +1,5 @@
 === WP-Chargify ===
-Contributors: Jason Glaspey: Subscription Tools, Todd Huish: 9seeds, John Hawkins: 9seeds
+Contributors: toddhuish, vegasgeek, stastic, jasonglaspey
 Website Link: http://9seeds.com
 Tags: Chargify, subscription, registration, tools, membership
 Requires: Wordpress 2.9
