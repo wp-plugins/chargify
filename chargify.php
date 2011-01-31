@@ -74,7 +74,7 @@ class chargify
 							$post->post_content = $chargify["chargifyDefaultNoAccess"]; 
 					}
 				}
-				$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see the Webcasts page.';
+				$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see this page.';
 			}
 			 
 			$posts[$k] = $post;
