@@ -4,7 +4,7 @@ Plugin Name: Chargify Wordpress Plugin
 Plugin URI: http://9seeds.com/plugins
 Description: Manage subscriptions to WordPress using the Chargify API
 Author: Subscription Tools - Programming by 9seeds
-Version: 1.0
+Version: 1.0.1
 Author URI: http://9seeds.com/plugins
  */
 
@@ -74,7 +74,7 @@ class chargify
 							$post->post_content = $chargify["chargifyDefaultNoAccess"]; 
 					}
 				}
-				$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see the Webcasts page. <p><img src="http://www.deprogramprogram.com/wp-content/uploads/2009/11/Northern-Israel1.jpg" alt="Northern Israel" title="Northern Israel" width="550" height="413" class="aligncenter size-full wp-image-504" /></p>';
+				$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see the Webcasts page.';
 			}
 			 
 			$posts[$k] = $post;

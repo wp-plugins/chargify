@@ -3,8 +3,8 @@ Contributors: toddhuish, vegasgeek, stastic, jasonglaspey
 Website Link: http://9seeds.com
 Tags: Chargify, subscription, registration, tools, membership
 Requires: Wordpress 2.9
-Tested up to: Wordpress 3.0.4
-Stable Tag: 1.0
+Tested up to: Wordpress 3.1 RC3
+Stable Tag: 1.0.1
 
 === Description ===
 
@@ -40,3 +40,8 @@ WP-Chargify allows users to integrate the Chargify service with Wordpress. Givin
 9. Logout of Wordpress and try it. Go through every step and make sure it's working before your turn off the Test function.
 10. If that works, you'll need to continue setting up your Chargify account, inputting whatever information you need for your merchant account, payment gateway, or PayPal account. See chargify's support for more information on that.
 
+== Changelog ==
+
+= 1.0.1 =
+* Remove hard coded image call
+* Continue hoping no one noticed hard coded image call
