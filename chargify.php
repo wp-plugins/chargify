@@ -93,7 +93,7 @@ class chargify
 
 	function subscriptionListShortCode($atts)
 	{
-		extract(shortcode_atts(array('accountingcodes' => '20,22'), $atts));
+		extract(shortcode_atts(array('accountingcodes'=>''), $atts));
 		$filteraccountingcodes = array();
 		if ($accountingcodes != '') {
 			$acs = explode(',', $accountingcodes);
@@ -217,14 +217,20 @@ class chargify
 				';
 			
 			$products = chargify::products();
+			$productdisplayed = 0;
 			foreach($products as $p)
 			{
-				if (isset($filteraccountingcodes[$p->getAccountCode()]) && $filteraccountingcodes[$p->getAccountCode()]) {
+				if ((isset($filteraccountingcodes[$p->getAccountCode()]) && $filteraccountingcodes[$p->getAccountCode()]) || count($filteraccountingcodes) == 0) {
 					$form .= '<tr>';
 					$form .= '<td><div align="center"><strong><p>'.$p->getName().'</strong><br>$'.$p->getPriceInDollars().' '.($p->getInterval() == 1 ? 'each '.$p->getIntervalUnit() : 'every '.$p->getInterval().' '.$p->getIntervalUnit().'s').'<br>'.$p->description.'</p></div></td>';
 					$form .= '<td><p><input onclick="javascript:document.chargifySignupForm.submit.value=\''.$p->id.'\';" name="submit'.$p->getHandle().'" type="submit" value="'.$p->getName().'"></p></td>';
 					$form .= '</tr>';
+					$productdisplayed = 1;
 				}
+			}
+			if(!$productdisplayed)
+			{
+				$form = '<form name="chargifySignupForm" method="post" action=""><table><tr><td colspan="2">No products found</td></tr>';
 			}
 			$form .= '</table>';
 			$form .= '</form>';
@@ -283,13 +289,21 @@ class chargify
 	{
 		if ( wp_verify_nonce( $_POST['chargify_signup_noncename'], plugin_basename(__FILE__) ) && is_numeric($_POST["submit"]))
 		{	
+			
+			if(!chargify::check_email_address($_POST["chargifySignupEmail"]) || !strlen($_POST["chargifySignupFirst"]) || !strlen($_POST["chargifySignupLast"]))
+			{
+				$_POST["chargify_signup_error"] = array('ERROR'=>"All fields are required. Please enter a name and valid email address");
+				return 0;
+			}
+			
 			$d = get_option("chargify");
 			require_once( ABSPATH . WPINC . '/registration.php');	
 			$user_login = sanitize_user( $_POST["chargifySignupEmail"] );
 			$user_email = apply_filters( 'user_registration_email', $_POST["chargifySignupEmail"] );
-			if(username_exists($user_login))
+			if(username_exists($user_login) || email_exists($user_email))
 			{
-				$_POST["chargify_signup_error"] = 'ERROR';
+				$_POST["chargify_signup_error"] = array('ERROR'=>"That email address is already in use, please choose another.");
+				return 0;
 			}
 			else
 			{
@@ -379,7 +393,7 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 		        require_once( ABSPATH . WPINC . '/registration.php');	
 				$user_login = sanitize_user( $_POST["chargifySignupEmail"] );
 				$user_email = apply_filters( 'user_registration_email', $_POST["chargifySignupEmail"] );
-				if(username_exists($user_login))
+				if(username_exists($user_login) || email_exists($user_email))
 				{
 					return "That email address is already in use, please choose another.".$the_content;
 				}
@@ -396,9 +410,9 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 		}
 
 		//check to see if there was an error in the form processing step in chargifyRedirect
-		if($_POST["chargify_signup_error"] == 'ERROR')
+		if(is_array($_POST["chargify_signup_error"]) && isset($_POST["chargify_signup_error"]['ERROR']))
 		{
-			return "That email address is already in use, please choose another.".$the_content;
+			return $_POST["chargify_signup_error"]['ERROR'].$the_content;
 		}
 
 		if($_GET["customer_reference"] && $_GET["subscription_id"] && !isset($_REQUEST["chargify.subscriptionPost"]))
@@ -599,6 +613,42 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 	{
 		add_meta_box( 'new-meta-boxes', 'Chargify Access Settings', array('chargify','metaAccessBox'), 'post', 'normal', 'high' );
 		add_meta_box( 'new-meta-boxes', 'Chargify Access Settings', array('chargify','metaAccessBox'), 'page', 'normal', 'high' );
+	}
+
+	function check_email_address($email)
+	{
+		// First, we check that there's one @ symbol, and that the lengths are right
+		if (!ereg("^[^@]{1,64}@[^@]{1,255}$", $email))
+		{
+			// Email invalid because wrong number of characters in one section, or wrong number of @ symbols.
+			return false;
+		}
+		// Split it into sections to make life easier
+		$email_array = explode("@", $email);
+		$local_array = explode(".", $email_array[0]);
+		for ($i = 0; $i < sizeof($local_array); $i++)
+		{
+			if (!ereg("^(([A-Za-z0-9!#$%&'*+/=?^_`{|}~-][A-Za-z0-9!#$%&'*+/=?^_`{|}~\.-]{0,63})|(\"[^(\\|\")]{0,62}\"))$", $local_array[$i]))
+			{
+				return false;
+			}
+		}
+		if (!ereg("^\[?[0-9\.]+\]?$", $email_array[1]))
+		{ // Check if domain is IP. If not, it should be valid domain name
+			$domain_array = explode(".", $email_array[1]);
+			if (sizeof($domain_array) < 2)
+			{
+				return false; // Not enough parts to domain
+			}
+			for ($i = 0; $i < sizeof($domain_array); $i++)
+			{
+				if (!ereg("^(([A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9])|([A-Za-z0-9]+))$", $domain_array[$i]))
+				{
+					return false;
+				}
+			}
+		}   
+		return true;
 	}
 }
 ?>
