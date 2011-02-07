@@ -6,11 +6,11 @@ Requires: Wordpress 2.9
 Tested up to: Wordpress 3.1 RC3
 Stable Tag: 1.0.2
 
-=== Description ===
+== Description ==
 
 WP-Chargify allows users to integrate the Chargify service with Wordpress. Giving you the ability to run a membership or subscription-based website, controlling access to content based on paid or free subscriptions.
 
-=== Instructions ===
+== Installation ==
 
 1. Create a Wordpress page where people will sign up for access to your site. This is where a user will be taken to register and begin the signup process.
   a. Place the shortcode [chargify] in the body of your page somewhere to create the sign up form.
