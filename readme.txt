@@ -2,7 +2,7 @@
 Contributors: toddhuish, vegasgeek, stastic, jasonglaspey
 Website Link: http://9seeds.com
 Tags: Chargify, subscription, registration, tools, membership
-Requires: Wordpress 2.9
+Requires at least: 2.9
 Tested up to: Wordpress 3.1 RC3
 Stable Tag: 1.0.2
 
