@@ -4,7 +4,7 @@ Plugin Name: Chargify Wordpress Plugin
 Plugin URI: http://9seeds.com/plugins
 Description: Manage subscriptions to WordPress using the Chargify API
 Author: Subscription Tools - Programming by 9seeds
-Version: 1.0.1
+Version: 1.0.2
 Author URI: http://9seeds.com/plugins
  */
 
