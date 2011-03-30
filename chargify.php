@@ -177,14 +177,20 @@ class chargify
 					<td>Month: '.$monthDrop.'<br>Year:'.$yearDrop.'</td>
 				</tr>	
 				';
+			$productdisplayed = 0;
 			foreach($products as $p)
 			{
-				if (isset($filteraccountingcodes[$p->getAccountCode()]) && $filteraccountingcodes[$p->getAccountCode()]) {
+				if ((isset($filteraccountingcodes[$p->getAccountCode()]) && $filteraccountingcodes[$p->getAccountCode()]) || count($filteraccountingcodes) == 0) {
 					$form .= '<tr>';
-					$form .= '<td><div align="center"><strong>'.$p->getName().'</strong><br>$'.$p->getPriceInDollars().' '.($p->getInterval() == 1 ? 'each '.$p->getIntervalUnit() : 'every '.$p->getInterval().' '.$p->getIntervalUnit().'s').'<br>'.$p->description.'</div></td>';
-					$form .= '<td><input onclick="javascript:document.chargifySignupForm.submit.value=\''.$p->getHandle().'\';" name="submit'.$p->getHandle().'" type="submit" value="'.$p->getName().'"></td>';
+					$form .= '<td><div align="center"><strong><p>'.$p->getName().'</strong><br>$'.$p->getPriceInDollars().' '.($p->getInterval() == 1 ? 'each '.$p->getIntervalUnit() : 'every '.$p->getInterval().' '.$p->getIntervalUnit().'s').'<br>'.$p->description.'</p></div></td>';
+					$form .= '<td><p><input onclick="javascript:document.chargifySignupForm.submit.value=\''.$p->id.'\';" name="submit'.$p->getHandle().'" type="submit" value="'.$p->getName().'"></p></td>';
 					$form .= '</tr>';
+					$productdisplayed = 1;
 				}
+			}
+			if(!$productdisplayed)
+			{
+				$form = '<form name="chargifySignupForm" method="post" action=""><table><tr><td colspan="2">No products found</td></tr>';
 			}
 
 			$form .= '</table>
@@ -364,7 +370,7 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 			$connector = new ChargifyConnector($opt);
 			$xml = '<?xml version="1.0" encoding="UTF-8"?>
 			<subscription>
-				<product_handle>' . $_POST["submit"] . '</product_handle>
+				<product_id>' . $_POST["submit"] . '</product_id>
 				<customer_attributes>
 				<first_name>'.$_POST["chargifySignupFirst"].'</first_name>
 				<last_name>'.$_POST["chargifySignupLast"].'</last_name>
@@ -383,19 +389,20 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 				<expiration_year>'.$_POST["chargifySignupExpYr"].'</expiration_year>
 				</credit_card_attributes>
 			</subscription>';
-			$res = $connector->createCustomerAndSubscription($xml);
-			if(strlen($res->error))
+			
+			require_once( ABSPATH . WPINC . '/registration.php');	
+			$user_login = sanitize_user( $_POST["chargifySignupEmail"] );
+			$user_email = apply_filters( 'user_registration_email', $_POST["chargifySignupEmail"] );
+			if(username_exists($user_login) || email_exists($user_email))
 			{
-				return '<strong>'.$res->error.'</strong><br><br>'.$the_content;
+				return "That email address is already in use, please choose another.".$the_content;
 			}
 			else
 			{
-		        require_once( ABSPATH . WPINC . '/registration.php');	
-				$user_login = sanitize_user( $_POST["chargifySignupEmail"] );
-				$user_email = apply_filters( 'user_registration_email', $_POST["chargifySignupEmail"] );
-				if(username_exists($user_login) || email_exists($user_email))
+				$res = $connector->createCustomerAndSubscription($xml);
+				if(strlen($res->error))
 				{
-					return "That email address is already in use, please choose another.".$the_content;
+					return '<strong>'.$res->error.'</strong><br><br>'.$the_content;
 				}
 				else
 				{
@@ -403,10 +410,11 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 					$user_id = wp_create_user( $user_login, $user_pass, $user_email );
 					wp_new_user_notification($user_id, $user_pass);
 					update_usermeta( $user_id, 'chargify_level', $res->getProduct()->getHandle()); 
-					update_usermeta( $user_id, 'chargify_custid', $sub->getCustomer()->getId()); 
+					update_usermeta( $user_id, 'chargify_custid', $res->getCustomer()->getId()); 
 					return $d["chargifyThankYou"];
-				}	
-			}
+				}
+			}	
+		
 		}
 
 		//check to see if there was an error in the form processing step in chargifyRedirect
