@@ -4,7 +4,7 @@ Plugin Name: Chargify Wordpress Plugin
 Plugin URI: http://9seeds.com/plugins
 Description: Manage subscriptions to WordPress using the Chargify API
 Author: Subscription Tools - Programming by 9seeds
-Version: 1.0.3
+Version: 1.0.4
 Author URI: http://9seeds.com/plugins
 */
 
@@ -22,7 +22,9 @@ add_filter('the_posts',array('chargify','checkAccess'));
 add_action('admin_menu', array('chargify','createMetaAccessBox'));  
 add_action('save_post', array('chargify','metaAccessBoxSave'));  
 add_filter('init', array('chargify','subscriptionRedirect'));  
-add_filter('the_content', array('chargify','subscriptionPost'));  
+add_filter('the_content', array('chargify','subscriptionDisplayError'));  
+add_filter('wp_loaded', array('chargify','subscriptionPost'));  
+add_filter('wp_loaded', array('chargify','subscriptionCreate'));  
 add_action('show_user_profile', array('chargify','userActions'));
 add_action('edit_user_profile', array('chargify','userActions'));
 add_action('profile_update', array('chargify','userActionsUpdate'));
@@ -50,7 +52,9 @@ class chargify
 	}
 	function checkAccess($posts)
 	{
-	    $user = wp_get_current_user();
+		$chargify = get_option('chargify');
+		
+		$user = wp_get_current_user();
 		if($user->roles[0] == 'administrator')
 		{
 			return $posts;
@@ -58,10 +62,9 @@ class chargify
 		
 		foreach($posts as $k => $post)
 		{
-			$chargify = get_option('chargify');
 			$d = get_post_meta($post->ID, 'chargify_access', true); 
 			$u = wp_get_current_user();
-			if(is_array($d["levels"]))
+			if(isset($d['levels']) && is_array($d["levels"]))
 			{
 				if(!in_array($u->chargify_level,$d["levels"]))
 				{
@@ -73,8 +76,9 @@ class chargify
 						default:
 							$post->post_content = $chargify["chargifyDefaultNoAccess"]; 
 					}
+					
+					$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see this page.';
 				}
-				$post->post_content .= '<br><br>Please log in or <a href="'.$chargify["chargifySignupLink"].'"><strong>Subscribe</strong></a> to see this page.';
 			}
 			 
 			$posts[$k] = $post;
@@ -104,13 +108,14 @@ class chargify
 		$d = get_option("chargify");
 		if($d["chargifySignupType"] == 'api')
 		{	
-			$monthDrop = '<select style="width:50px" name="chargifySignupExpMo">';
+			$monthDrop = '<select style="" name="chargifySignupExpMo"><option value="">mm</option>';
 			for($i=1; $i<13; $i++)
 			{
-				$monthDrop .= '<option value="'.$i.'" '.($_POST["chargifySignupExpMo"] == $i ? "selected" : "").'>'.$i.'</option>';
+				$ii = str_pad($i,2,0,STR_PAD_LEFT);
+				$monthDrop .= '<option value="'.$ii.'" '.($_POST["chargifySignupExpMo"] == $ii ? "selected" : "").'>'.$ii.'</option>';
 			}
 			$monthDrop .= '</select>';
-			$yearDrop = '<select style="width:70px" name="chargifySignupExpYr">';
+			$yearDrop = '<select style="" name="chargifySignupExpYr"><option value="">yyyy</option>';
 			for($i=(int)date("Y"); $i < (int)date("Y",strtotime("+10 years")); $i++)
 			{
 				$yearDrop .= '<option value="'.$i.'" '.($_POST["chargifySignupExpYr"] == $i ? "selected" : "").'>'.$i.'</option>';
@@ -174,7 +179,7 @@ class chargify
 				</tr>
 				<tr>
 					<td>Credit Card Expiration</td>
-					<td>Month: '.$monthDrop.'<br>Year:'.$yearDrop.'</td>
+					<td>'.$monthDrop.'/'.$yearDrop.'</td>
 				</tr>	
 				';
 			$productdisplayed = 0;
@@ -279,24 +284,63 @@ class chargify
 		
 		$d = get_post_meta($post->ID, 'chargify_access', true); 
 		
-		$levels = $d["levels"];
+		if(isset($d["levels"]))
+			$levels = $d["levels"];
 		
 		$products = chargify::products();
 		$form = '<strong>User levels that can access this content</strong> Note: If you don\'t choose any levels below this will be a <strong>public<strong> post<br>';
 		$form .= '<input type="hidden" name="access_noncename" id="access_noncename" value="'.wp_create_nonce( plugin_basename(__FILE__) ).'" />';
 		foreach($products as $p)
 		{
-			$form .= '<input type="checkbox" name="chargifyAccess['.$p->getHandle().']" value="'.$p->getHandle().'" '.($levels[$p->getHandle()] ? "checked" : "").'> '.$p->getName().'<br>';
+			$form .= '<input type="checkbox" name="chargifyAccess['.$p->getHandle().']" value="'.$p->getHandle().'" '.(isset($levels[$p->getHandle()]) && $levels[$p->getHandle()] ? "checked" : "").'> '.$p->getName().'<br>';
 		}
 		echo $form;
 	}	
-	
+	function subscriptionCreate()
+	{
+		if(isset($_GET["customer_reference"]) && isset($_GET["subscription_id"]) && !isset($_REQUEST["chargify.subscriptionPost"]))
+		{
+			$d = get_option('chargify');
+			$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));	
+			$connector = new ChargifyConnector($opt);
+			$sub = $connector->getSubscriptionsBySubscriptionId($_GET["subscription_id"]);
+			if($sub->getState() == 'active' || $sub->getState() == 'trialing')
+			{
+				$trans = get_transient('chargify-'.$_GET['customer_reference']);
+				if(is_array($trans) && isset($trans['user_email']))
+				{
+					$email = $trans['user_email'];
+					$user_pass = $trans['user_pass'];
+					require_once( ABSPATH . WPINC . '/registration.php');
+					$user_id = wp_create_user( $email, $user_pass, $email );
+					if(is_wp_error($user_id))
+					{
+						$_POST['chargify_signup_error'] = $user_id->get_error_message();
+					}
+					else
+					{
+						//It's possible to hit this section twice depending on configuration
+						//this ensures that it won't do all this work twice
+						//it's a filthy hack but it works for now
+						$_REQUEST["chargify.subscriptionPost"] = $user_id;
+						delete_transient('chargify-'.$_GET['customer_reference']);
+
+						wp_new_user_notification($user_id, $user_pass);
+						
+						update_usermeta( $user_id, 'chargify_level', $sub->getProduct()->getHandle()); 
+						update_usermeta( $user_id, 'chargify_custid', $sub->getCustomer()->getId());
+						self::login( $user_id, $email); 
+					}
+				}
+			}
+		}
+	}
 	function subscriptionRedirect()
 	{
 		if ( wp_verify_nonce( $_POST['chargify_signup_noncename'], plugin_basename(__FILE__) ) && is_numeric($_POST["submit"]))
 		{	
 			
-			if(!chargify::check_email_address($_POST["chargifySignupEmail"]) || !strlen($_POST["chargifySignupFirst"]) || !strlen($_POST["chargifySignupLast"]))
+			if(!is_email($_POST["chargifySignupEmail"]) || !strlen($_POST["chargifySignupFirst"]) || !strlen($_POST["chargifySignupLast"]))
 			{
 				$_POST["chargify_signup_error"] = array('ERROR'=>"All fields are required. Please enter a name and valid email address");
 				return 0;
@@ -314,12 +358,14 @@ class chargify
 			else
 			{
 				$user_pass = wp_generate_password();
-				$d[$_POST["chargifySignupEmail"]]["user_login"] = $user_login;
-				$d[$_POST["chargifySignupEmail"]]["user_email"] = $user_email;
-				$d[$_POST["chargifySignupEmail"]]["user_pass"] = $user_pass;
-				update_option("chargify",$d);
+				$trans = array();
+				$trans["user_login"] = $user_login;
+				$trans["user_email"] = $user_email;
+				$trans["user_pass"] = $user_pass;
 
-				$uri = '?first_name='.urlencode($_POST["chargifySignupFirst"]).'&last_name='.urlencode($_POST["chargifySignupLast"]).'&email='.urlencode($_POST["chargifySignupEmail"]).'&reference='.urlencode($_POST["chargifySignupEmail"]);
+				set_transient("chargify-".md5($user_email),$trans);
+
+				$uri = '?first_name='.urlencode($_POST["chargifySignupFirst"]).'&last_name='.urlencode($_POST["chargifySignupLast"]).'&email='.urlencode($_POST["chargifySignupEmail"]).'&reference='.urlencode(md5($user_email));
 				if($d["chargifyMode"] == 'test')
 				{
 					header("Location: https://".$d["chargifyTestDomain"].".chargify.com/h/".$_POST["submit"]."/subscriptions/new".$uri);
@@ -336,7 +382,7 @@ class chargify
 		{
 			global $wpdb;
 			$sub_ids = json_decode(file_get_contents('php://input'));
-file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
+			
 			if($sub_ids !== NULL && is_array($sub_ids))
 			{
 				$d = get_option('chargify');
@@ -357,8 +403,21 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 			}
 		}
 	}
+	function subscriptionDisplayError($content)
+	{
+		//check to see if there was an error in the form processing step in chargifyRedirect
+		if(is_array($_POST["chargify_signup_error"]) && isset($_POST["chargify_signup_error"]['ERROR']))
+		{
+			$d = get_option("chargify");
+			if($_POST["chargify_signup_error"]['ERROR'] == '<strong>'.$d['chargifyThankYou'].'</strong>')
+				return $_POST["chargify_signup_error"]['ERROR'];
+			else
+				return $_POST["chargify_signup_error"]['ERROR'].$content;
+		}
 
-	function subscriptionPost($the_content)
+		return $content;	
+	}
+	function subscriptionPost($content)
 	{
 		$d = get_option("chargify");
 
@@ -395,14 +454,18 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 			$user_email = apply_filters( 'user_registration_email', $_POST["chargifySignupEmail"] );
 			if(username_exists($user_login) || email_exists($user_email))
 			{
-				return "That email address is already in use, please choose another.".$the_content;
+				$_POST["chargify_signup_error"]['ERROR'] = 'That email address is already in use, please choose another';
+				return 0;
+				//return "That email address is already in use, please choose another.".$the_content;
 			}
 			else
 			{
 				$res = $connector->createCustomerAndSubscription($xml);
 				if(strlen($res->error))
 				{
-					return '<strong>'.$res->error.'</strong><br><br>'.$the_content;
+					$_POST["chargify_signup_error"]['ERROR'] = '<strong>'.$res->error.'</strong>'; 
+					return 0;
+					//return '<strong>'.$res->error.'</strong><br><br>'.$the_content;
 				}
 				else
 				{
@@ -411,51 +474,13 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 					wp_new_user_notification($user_id, $user_pass);
 					update_usermeta( $user_id, 'chargify_level', $res->getProduct()->getHandle()); 
 					update_usermeta( $user_id, 'chargify_custid', $res->getCustomer()->getId()); 
-					return $d["chargifyThankYou"];
+					$_POST["chargify_signup_error"]['ERROR'] = '<strong>'.$d['chargifyThankYou'].'</strong>';
+					self::login( $user_id, $user_email); 
+					//return $d["chargifyThankYou"];
 				}
 			}	
+		}
 		
-		}
-
-		//check to see if there was an error in the form processing step in chargifyRedirect
-		if(is_array($_POST["chargify_signup_error"]) && isset($_POST["chargify_signup_error"]['ERROR']))
-		{
-			return $_POST["chargify_signup_error"]['ERROR'].$the_content;
-		}
-
-		if($_GET["customer_reference"] && $_GET["subscription_id"] && !isset($_REQUEST["chargify.subscriptionPost"]))
-		{
-			$d = get_option('chargify');
-			$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));	
-			$connector = new ChargifyConnector($opt);
-			$sub = $connector->getSubscriptionsBySubscriptionId($_GET["subscription_id"]);
-			if($sub->getState() == 'active' || $sub->getState() == 'trialing')
-			{
-				$email = $_GET["customer_reference"]; 
-				if(isset($d[$email]))
-                {
-                    require_once( ABSPATH . WPINC . '/registration.php');
-                    $user_id = wp_create_user( $d[$email]["user_login"], $d[$email]["user_pass"], $d[$email]["user_email"] );
-                    if(is_wp_error($user_id))
-                    {
-                        return $user_id->get_error_message();
-                    }
-                    else
-                    {
-						//It's possible to hit this section twice depending on configuration
-						//this ensures that it won't do all this work twice
-						//it's a filthy hack but it works for now
-						$_REQUEST["chargify.subscriptionPost"] = $user_id;
-                        wp_new_user_notification($user_id, $d[$email]["user_pass"]);
-                        
-                        update_usermeta( $user_id, 'chargify_level', $sub->getProduct()->getHandle()); 
-                        update_usermeta( $user_id, 'chargify_custid', $sub->getCustomer()->getId());
-                        return $d["chargifyThankYou"];
-                    }
-                }
-			}
-		}	
-		return $the_content;
 	}
 	function metaAccessBoxSave($post_id)
 	{
@@ -600,7 +625,7 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
                 <table class="form-table">      
                 <tr valign="top">           
                     <th scope="row"><label>Link to signup page.</label></th>
-                    <td><input type="text" size="60" name="chargifySignupLink" value="'.$d['chargifySignupLink'].'"><span class="description">This will get shown on the page when a user doesn\'t haveaccess to the content</span></td>            
+                    <td><input type="text" size="60" name="chargifySignupLink" value="'.$d['chargifySignupLink'].'"><span class="description">This will get shown on the page when a user doesn\'t have access to the content</span></td>            
                 </tr>
             </table>            
             <hr />
@@ -623,40 +648,15 @@ file_put_contents("/tmp/postback",print_r($sub_ids,true),FILE_APPEND);
 		add_meta_box( 'new-meta-boxes', 'Chargify Access Settings', array('chargify','metaAccessBox'), 'page', 'normal', 'high' );
 	}
 
-	function check_email_address($email)
+	function login( $user_id, $user_login, $remember = false ) 
 	{
-		// First, we check that there's one @ symbol, and that the lengths are right
-		if (!ereg("^[^@]{1,64}@[^@]{1,255}$", $email))
-		{
-			// Email invalid because wrong number of characters in one section, or wrong number of @ symbols.
-			return false;
-		}
-		// Split it into sections to make life easier
-		$email_array = explode("@", $email);
-		$local_array = explode(".", $email_array[0]);
-		for ($i = 0; $i < sizeof($local_array); $i++)
-		{
-			if (!ereg("^(([A-Za-z0-9!#$%&'*+/=?^_`{|}~-][A-Za-z0-9!#$%&'*+/=?^_`{|}~\.-]{0,63})|(\"[^(\\|\")]{0,62}\"))$", $local_array[$i]))
-			{
-				return false;
-			}
-		}
-		if (!ereg("^\[?[0-9\.]+\]?$", $email_array[1]))
-		{ // Check if domain is IP. If not, it should be valid domain name
-			$domain_array = explode(".", $email_array[1]);
-			if (sizeof($domain_array) < 2)
-			{
-				return false; // Not enough parts to domain
-			}
-			for ($i = 0; $i < sizeof($domain_array); $i++)
-			{
-				if (!ereg("^(([A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9])|([A-Za-z0-9]+))$", $domain_array[$i]))
-				{
-					return false;
-				}
-			}
-		}   
-		return true;
+		$user = get_userdata( $user_id );
+		if( ! $user )
+			return;
+		wp_set_auth_cookie( $user_id, $remember );
+		wp_set_current_user( $user_id, $user_login );
+		do_action( 'wp_login', $user_login, $user );
 	}
 }
+
 ?>

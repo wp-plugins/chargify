@@ -37,6 +37,8 @@ class ChargifyCustomer extends ChargifyConnector
   public function getUpdatedAt() { return $this->updated_at; }
   
   public function getFullName() { return $this->first_name . ' ' . $this->last_name; }
+
+  public function getEmail() { return $this->email; }
 }
 
 ?>
