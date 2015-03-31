@@ -427,6 +427,7 @@ class chargify
 		$products = self::products();
 		$form = '<strong>User levels that can access this content</strong> Note: If you don\'t choose any levels below this will be a <strong>public<strong> post<br>';
 		$form .= '<input type="hidden" name="access_noncename" id="access_noncename" value="'.wp_create_nonce( plugin_basename(__FILE__) ).'" />';
+		if(is_array($products))
 		foreach($products as $p)
 		{
 			$form .= '<input type="checkbox" name="chargifyAccess['.$p->getHandle().'][enable]" value="'.$p->getHandle().'" '.(isset($levels[$p->getHandle()]) && isset($levels[$p->getHandle()]) ? "checked" : "").'> '.$p->getName();
@@ -602,6 +603,7 @@ class chargify
 		$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));	
 		$connector = new ChargifyConnector($opt);
 		$subs = $connector->getSubscriptionsByCustomerID($u->chargify_custid);
+		if(is_array($subs))
 		foreach($subs as $sub)
 		{
 			if($sub->getState() == 'canceled')
@@ -873,6 +875,7 @@ class chargify
 			echo '<h3>Chargify Product Settings</h3>';
 			echo '<style>.chargify-product{margin-bottom:25px;border:1px solid #dfdfdf;max-width:700px;padding:10px;background:white}.disabled{background:#333}.enabled{background:green}.chargify-product-title{color:white;margin-left:-10px;margin-right:-10px;margin-top:-10px;font-size:18pt;padding:10px;margin-bottom:10px;overflow:hidden}.chargify-product textarea{width:100%;height:6em}.chargify-product input[type="text"]{width:50%}.enablebox{float:right;}.sync{display:none}.outofsync{margin-right:25px;color:#c00}</style>';
 			$products = self::products(true);
+			if(is_array($products))
 			foreach($products as $p)
 			{
 				$sync = 'sync';
