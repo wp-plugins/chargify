@@ -1,5 +1,4 @@
 <?php
-
 //Reference Documentation: http://support.chargify.com/faqs/api/api-products
 
 class ChargifyProduct extends ChargifyConnector
@@ -11,22 +10,36 @@ class ChargifyProduct extends ChargifyConnector
   private $accounting_code;
   private $interval_unit;
   private $interval;
+  private $description;
+  private $return_url;
 
   public function __construct(SimpleXMLElement $product_xml_node)
-  {  
+  { 
     //Load object dynamically and convert SimpleXMLElements into strings
-    foreach($product_xml_node as $key => $element) {
-      if (count($element)) {
-        foreach($element as $childname => $child) {
-          $this->{$key}[$childname] = (string)$child;
-        }
-      } 
-      else {
-        $this->$key = (string)$element;
-      }
-    }
-  }
-  
+	foreach($product_xml_node as $key => $element) 
+	{	
+		if (count($element)) 
+		{
+			if($key == 'public_signup_pages')
+			{
+				foreach($element as $e)
+					$this->{$key}[] = array('id'=>(string)$e->id,'url'=>(string)$e->url);
+			}
+			else
+			{
+				foreach($element as $childname => $child) 
+				{
+					$this->{$key}[$childname] = (string)$child;
+				}
+			}
+		} 
+		else 
+		{
+			$this->$key = (string)$element;
+		}
+	}
+}
+
   
   /* Getters */
   
@@ -46,4 +59,9 @@ class ChargifyProduct extends ChargifyConnector
   
   public function getInterval() { return $this->interval; }
 
+  public function getDescription() {return $this->description; }
+
+  public function getReturnUrl() {return $this->return_url; }
+
+  public function getReturnParams() {return $this->return_params; }
 }
