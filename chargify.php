@@ -4,7 +4,7 @@ Plugin Name: Chargify Wordpress Plugin
 Plugin URI: http://9seeds.com/plugins
 Description: Manage subscriptions to WordPress using the Chargify API
 Author: Subscription Tools - Programming by 9seeds
-Version: 2.0
+Version: 2.0.2
 Author URI: http://9seeds.com/plugins
 */
 
@@ -31,11 +31,36 @@ add_action('show_user_profile', array('chargify','userActions'));
 add_action('edit_user_profile', array('chargify','userActions'));
 add_action('profile_update', array('chargify','userActionsUpdate'));
 add_action('admin_print_scripts-toplevel_page_chargify-admin-settings',array('chargify','adminScripts'));
+add_action('wp_login',array('chargify','checkSubStatus'),10,2);
 register_activation_hook(__FILE__,array("chargify","activate"));
 register_deactivation_hook(__FILE__,array("chargify","deactivate"));
 
 class chargify
 {
+	function checkSubStatus($login,$user)
+	{
+		$user_id = $user->ID;
+		if(empty($user->chargify_level))
+			return;
+
+		$d = get_option('chargify');
+		$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));
+		$connector = new ChargifyConnector($opt);
+
+		$sub = $connector->getSubscriptionsByCustomerID($user->chargify_custid);
+		if(is_array($sub))
+		{
+			foreach($sub as $s)
+			{
+				if($s->getState() == 'canceled')
+				{
+					$usub = get_usermeta($user_id,'chargify_level',true);
+					unset($usub[$s->getProduct()->getHandle()]);
+					update_usermeta($user_id,'chargify_level',$usub);
+				}
+			}
+		}
+	}
 	function adminScripts()
 	{
         $pluginurl = WP_PLUGIN_URL . '/' . plugin_basename(dirname(__FILE__));
@@ -391,12 +416,20 @@ class chargify
 	}
 	function userActionsUpdate($user_id)
 	{
-		if($_POST["chargifyCancelSubscription"])
+		global $current_user;
+
+		if(isset($_POST["chargifyCancelSubscription"]) && is_numeric($_POST['chargifyCancelSubscription']) && ($user_id == $current_user->ID || current_user_can('activate_plugins')))
 		{
 			$d = get_option('chargify');
 			$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));	
 			$connector = new ChargifyConnector($opt);
 			$connector->cancelSubscription($_POST["chargifyCancelSubscription"]);
+
+			//get rid of it on our side
+			$sub = $connector->getSubscriptionsBySubscriptionID($_POST['chargifyCancelSubscription']);
+			$usub = get_usermeta($user_id,'chargify_level',true);
+			unset($usub[$sub->getProduct()->getHandle()]);
+			update_usermeta($user_id,'chargify_level',$usub);
 		}
 	}
 	function userActions($u)
@@ -538,7 +571,7 @@ class chargify
 				if($current_user->ID)
 					$trans['existing_user'] = true;
 
-				set_transient("chargify-".md5($user_email.$_POST['submit']),$trans);
+				set_transient("chargify-".md5($user_email.$_POST['submit'].time()),$trans);
 
 				$opt = array("api_key" => $d["chargifyApiKey"],"test_api_key" => $d["chargifyTestApiKey"],"domain" => $d["chargifyDomain"],"test_domain" => $d["chargifyTestDomain"],"test_mode"=>($d["chargifyMode"] == 'test'? TRUE : FALSE));	
 				$connector = new ChargifyConnector($opt);
@@ -547,7 +580,7 @@ class chargify
 				$pubpage = array_shift($product->public_signup_pages);
 				if(is_array($pubpage))
 				{
-					$uri = '?first_name='.urlencode($_POST["chargifySignupFirst"]).'&last_name='.urlencode($_POST["chargifySignupLast"]).'&email='.urlencode($_POST["chargifySignupEmail"]).'&reference='.urlencode(md5($user_email.$_POST['submit']));
+					$uri = '?first_name='.urlencode($_POST["chargifySignupFirst"]).'&last_name='.urlencode($_POST["chargifySignupLast"]).'&email='.urlencode($_POST["chargifySignupEmail"]).'&reference='.urlencode(md5($user_email.$_POST['submit'].time()));
 					
 					header("Location: ".$pubpage['url'].$uri);
 					exit;
