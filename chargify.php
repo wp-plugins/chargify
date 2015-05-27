@@ -4,7 +4,7 @@ Plugin Name: Chargify Wordpress Plugin
 Plugin URI: http://9seeds.com/plugins
 Description: Manage subscriptions to WordPress using the Chargify API
 Author: Subscription Tools - Programming by 9seeds
-Version: 2.0.3
+Version: 2.0.4
 Author URI: http://9seeds.com/plugins
 */
 
@@ -404,11 +404,12 @@ class chargify
 			if(is_array($products))
 			foreach($products as $p)
 			{
-				$planName = $p->getName();
+				$pNameAdjusted = sanitize_title_with_dashes($p->getName());
+				/*
 				$planNameAdjusted = str_replace('-', ' ', $plan);
 				$pName = strtolower($planName);
 				$pNameAdjusted = strtolower($planNameAdjusted);
-
+				*/
 				if ((isset($filteraccountingcodes[$p->getAccountCode()]) && $filteraccountingcodes[$p->getAccountCode()]) || count($filteraccountingcodes) == 0) 
 				{
 					if(!isset($plan))
@@ -429,7 +430,7 @@ class chargify
 					}
 					else
 					{
-						if($pName == $pNameAdjusted && isset($plan))
+						if($plan == $pNameAdjusted)
 						{
 							if(isset($current_user->chargify_level[$p->getHandle()]))
 							{	
@@ -960,7 +961,7 @@ class chargify
 				$sync = 'sync';
 				if($d['chargifyProducts'][$p->id]['raw'] != base64_encode(serialize($p)) && $d['chargifyProducts'][$p->id]['enable'] == 'on')
 					$sync = 'outofsync';	
-				$url = $d['chargifySignupLink'].'?plan='.strtolower(str_replace(' ','-',$p->getName()));
+				$url = $d['chargifySignupLink'].'?plan='.strtolower(sanitize_title_with_dashes($p->getName()));
 				
 				echo '<input type="hidden" name="chargifyproduct['.$p->id.'][raw]" value="'.base64_encode(serialize($p)).'">';
 				echo '<div class="chargify-product">';

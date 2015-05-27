@@ -244,11 +244,13 @@ class ChargifyConnector
 	$post_xml = '
 		<?xml version="1.0" encoding="UTF-8"?>
 		<product>';
-	foreach($data as $k=>$v)
-		$post_xml .= '<'.$k.'>'.$v.'</'.$k.'>';
 	$post_xml .= '</product>';
 
-	$xml = $this->sendRequest('/products/'.$id.'.xml',trim($post_xml),'put');
+	$xml = simplexml_load_string(trim($post_xml));
+	foreach($data as $k=>$v)
+		$xml->{$k} = $v;
+
+	$xml = $this->sendRequest('/products/'.$id.'.xml',trim($xml->asXml()),'put');
     $pxml = new SimpleXMLElement($xml);
 	$product = new ChargifyProduct($pxml);
 	return $product;
