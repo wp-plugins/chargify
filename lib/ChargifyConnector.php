@@ -44,6 +44,11 @@ class ChargifyConnector
     return $this->sendRequest('/customers.xml?page=' . $page_num);
   }
   
+  public function retrieveProductXMLByID($id)
+  {
+    	return $this->sendRequest('/products/' . $id . '.xml');
+	}
+  
   public function retrieveCustomerXMLByID($id)
   {
     return $this->sendRequest('/customers/' . $id . '.xml');
@@ -67,7 +72,12 @@ class ChargifyConnector
   {
     return $this->sendRequest('/products.xml');
   }
-  
+  public function retrieveAllWebhooksXML()
+  {
+    return $this->sendRequest('/webhooks.xml');
+  }
+
+
   /*
      Example post xml:     
  
@@ -152,7 +162,15 @@ class ChargifyConnector
         
     return $customer;
   }
-  
+
+  public function getProductByID($id)
+  {
+	  $xml = $this->retrieveProductXMLByID($id);
+	  $product_xml_node = new SimpleXMLElement($xml);
+	  $product = new ChargifyProduct($product_xml_node);
+	  return $product;
+  }
+
   public function getSubscriptionsByCustomerID($id)
   {
     $xml = $this->retrieveSubscriptionsXMLByCustomerID($id);
@@ -185,8 +203,8 @@ class ChargifyConnector
     $xml = $this->retrieveAllProductsXML();
 	
 	$all_products = new SimpleXMLElement($xml);
-   
-    $product_objects = array();
+    
+	$product_objects = array();
     
     foreach($all_products as $product)
     {
@@ -195,6 +213,13 @@ class ChargifyConnector
     }
     
     return $product_objects;
+  }
+  public function getAllWebhooks()
+  {
+    $xml = $this->retrieveAllWebhooksXML();
+	$all_webhooks = new SimpleXMLElement($xml);
+   
+    return $all_webhooks;
   }
   
   /**
@@ -210,26 +235,28 @@ class ChargifyConnector
     return $customer;
   }
 
+
   public function cancelSubscription($id) {
     return $this->sendRequest('/subscriptions/' . $id . '.xml',NULL,'delete');
   }
 
-  protected function curlArguments($uri, $post_xml = null) {
-    $args[] = "-k";
-    $args[] = "-u {$this->active_api_key}:x";
-    $args[] = "-H Content-Type:application/xml";
-    $args[] = "https://{$this->active_domain}.chargify.com{$uri}";
-    
-    if ($post_xml) {
-      $args[] = "--data-binary \"$post_xml\"";
-    }
-    
-    return $args;
+  public function updateProduct($id,$data) {
+	$post_xml = '
+		<?xml version="1.0" encoding="UTF-8"?>
+		<product>';
+	$post_xml .= '</product>';
+
+	$xml = simplexml_load_string(trim($post_xml));
+	foreach($data as $k=>$v)
+		$xml->{$k} = $v;
+
+	$xml = $this->sendRequest('/products/'.$id.'.xml',trim($xml->asXml()),'put');
+    $pxml = new SimpleXMLElement($xml);
+	$product = new ChargifyProduct($pxml);
+	return $product;
   }
   
   protected function sendRequest($uri, $post_xml = null,$method = null) {    
-    //exec('curl ' . join(' ', $this->curlArguments($uri, $post_xml)), $output);
-    //$xml = implode("\n", $output);
 	$apiUrl = "https://{$this->active_domain}.chargify.com{$uri}";
 	$ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $apiUrl);
@@ -237,7 +264,11 @@ class ChargifyConnector
     curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION,1);
     curl_setopt($ch, CURLOPT_HEADER , 0);
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE); 
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+	if($method == 'put')
+	{
+		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+	}
 	if($post_xml)
 	{
     	curl_setopt($ch, CURLOPT_POST, 1);
@@ -249,9 +280,14 @@ class ChargifyConnector
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
 	}
 	curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-
     $xml = curl_exec($ch);
-    curl_close($ch);
+	
+	curl_close($ch);
+	
+	libxml_use_internal_errors(true);
+	$sxe = simplexml_load_string($xml);
+	if (!$sxe) { $xml = '<error>'.$xml.'</error>'; }
+
 	return $xml;
   }
 }
